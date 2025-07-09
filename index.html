@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>One-to-One Chat</title>
+  <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+</head>
+<body>
+  <h2>🔐 One-to-One Chat App (Socket.IO)</h2>
+
+  <label>JWT Token:</label><br />
+  <input type="text" id="token" placeholder="Enter JWT token" size="60" /><br /><br />
+
+  <label>Send To (User ID):</label><br />
+  <input type="text" id="to" placeholder="Receiver userId" size="40" /><br /><br />
+
+  <label>Message:</label><br />
+  <input type="text" id="message" placeholder="Type your message" size="40" />
+  <button onclick="sendMessage()">Send</button>
+
+  <hr />
+  <h3>📨 Messages:</h3>
+  <ul id="messages"></ul>
+
+  <script>
+    const socket = io("http://localhost:5000");
+
+    // Authenticate on connect
+    document.getElementById("token").addEventListener("change", () => {
+      const token = document.getElementById("token").value;
+      socket.emit("authenticate", token);
+    });
+
+    // Send private message
+    function sendMessage() {
+      const to = document.getElementById("to").value;
+      const text = document.getElementById("message").value;
+      socket.emit("private_message", { to, text });
+    }
+
+    // Receive message
+    socket.on("new_message", (msg) => {
+      const item = document.createElement("li");
+      item.textContent = `🗨️ From ${msg.from}: ${msg.text}`;
+      document.getElementById("messages").appendChild(item);
+    });
+  </script>
+</body>
+</html>
