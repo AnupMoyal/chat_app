@@ -116,83 +116,93 @@ const onlineUsers = new Map(); // userId => socketId
 const socketHandler = (io, socket) => {
   console.log('🟢 Socket connected:', socket.id);
 
-  // ✅ Step 1: Authenticate user with token
+  // ✅ 1. Authenticate socket
   socket.on('authenticate', async (token) => {
     try {
       const decoded = jwt.verify(token, process.env.JWT_SECRET);
       const user = await User.findById(decoded.id);
-      if (!user) {
-        console.log('❌ User not found');
-        return socket.disconnect();
-      }
+      if (!user) return socket.disconnect();
 
       socket.userId = user._id.toString();
       onlineUsers.set(user._id.toString(), socket.id);
 
-      console.log(`✅ ${user.username} authenticated (socket ID: ${socket.id})`);
+      console.log(`✅ ${user.username} authenticated with socket ID: ${socket.id}`);
     } catch (err) {
-      console.log('❌ Invalid token:', err.message);
+      console.log('❌ Invalid token');
       socket.disconnect();
     }
   });
 
-  // ✅ Step 2: Handle private messages
+  // ✅ 2. Private 1-to-1 message
   socket.on('private_message', async ({ to, text }) => {
     const from = socket.userId;
-    if (!from || !to || !text) {
-      console.log("⚠️ Missing required fields");
-      return;
-    }
+    if (!from || !to || !text) return;
 
-    // Validate ObjectId format
     if (
       !mongoose.Types.ObjectId.isValid(from) ||
       !mongoose.Types.ObjectId.isValid(to)
-    ) {
-      console.log("❌ Invalid sender or receiver ID format");
-      return;
+    ) return;
+
+    const message = await Message.create({
+      sender: from,
+      receiver: to,
+      text,
+      room: null
+    });
+
+    const payload = {
+      from,
+      text,
+      timestamp: message.createdAt
+    };
+
+    const toSocketId = onlineUsers.get(to);
+    if (toSocketId) {
+      io.to(toSocketId).emit('new_message', payload);
     }
 
-    try {
-      // Save to MongoDB
-      const message = await Message.create({
-        sender: new mongoose.Types.ObjectId(from),
-        receiver: new mongoose.Types.ObjectId(to),
-        text,
-        room: null,
-      });
+    socket.emit('new_message', payload);
 
-      console.log("✅ Message saved to MongoDB:", message);
-
-      const payload = {
-        from,
-        text,
-        timestamp: message.createdAt,
-      };
-
-      // Emit to receiver (if online)
-      const receiverSocketId = onlineUsers.get(to);
-      if (receiverSocketId) {
-        io.to(receiverSocketId).emit('new_message', payload);
-      }
-
-      // Emit to sender
-      socket.emit('new_message', payload);
-
-      console.log(`📨 ${from} ➡ ${to}: ${text}`);
-    } catch (err) {
-      console.error("❌ Error saving message:", err.message);
-    }
+    console.log(`📨 [1-to-1] ${from} ➡ ${to}: ${text}`);
   });
 
-  // ✅ Step 3: Handle disconnect
+  // ✅ 3. Join Room
+  socket.on('join_room', (roomId) => {
+    socket.join(roomId);
+    console.log(`📥 ${socket.userId} joined room: ${roomId}`);
+  });
+
+  // ✅ 4. Send message to room
+  socket.on('room_message', async ({ room, text }) => {
+    const from = socket.userId;
+    if (!from || !room || !text) return;
+
+    const message = await Message.create({
+      sender: from,
+      text,
+      room,
+      receiver: null
+    });
+
+    const payload = {
+      from,
+      text,
+      room,
+      timestamp: message.createdAt
+    };
+
+    io.to(room).emit('new_room_message', payload);
+
+    console.log(`📢 [Room ${room}] ${from}: ${text}`);
+  });
+
+  // ✅ 5. Disconnect
   socket.on('disconnect', () => {
     if (socket.userId) {
       onlineUsers.delete(socket.userId);
     }
-    console.log('🔴 Socket disconnected:', socket.id);
+    console.log('🔴 Disconnected:', socket.id);
   });
 };
 
 export default socketHandler;
-

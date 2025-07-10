@@ -8,6 +8,8 @@ import { Server } from 'socket.io';
 import connectDB from './src/config/db.js';
 import authRoutes from './src/routes/authRoutes.js';
 import socketHandler from './src/sockets/socketHandler.js';
+import userRoutes from './src/routes/userRoutes.js';
+import messageRoutes from './src/routes/messageRoutes.js';
 
 const app = express();
 const server = http.createServer(app);
@@ -34,6 +36,8 @@ app.use(express.json());
 
 // Routes
 app.use('/api/auth', authRoutes);
+app.use('/api/users', userRoutes);
+app.use('/api/messages', messageRoutes);
 
 // WebSocket Handler
 io.on('connection', (socket) => {
